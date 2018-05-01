@@ -16,9 +16,11 @@
     "node-fetch": "^2.1.2",
     "react": "^16.3.2",
     "react-dom": "^16.3.2",
-    "react-relay": "^1.6.0"
+    "react-relay": "^1.6.0",
+    "relay-compiler": "^1.6.0"
   },
   "scripts": {
-    "start": "babel-node index.js"
+    "start": "babel-node ./src/index.js",
+    "relay": "relay-compiler --src ./src --schema ./schema.graphql --extensions js jsx"
   }
 }
