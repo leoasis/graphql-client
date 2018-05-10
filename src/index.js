@@ -1,5 +1,5 @@
 import "isomorphic-fetch";
-import ApolloClient, { record } from "apollo-boost";
+import ApolloClient from "apollo-boost";
 import gql from "graphql-tag";
 
 import { Environment, Network, RecordSource, Store } from "relay-runtime";

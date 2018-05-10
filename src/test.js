@@ -1,8 +1,30 @@
-
+import { InMemoryCache } from 'apollo-cache-inmemory';
+import gql from "graphql-tag";
 
 test('poc', () => {
   const compiler = new Compiler('../schema.graphql');
-  const { readQuery } = compiler.compile(`
+
+  const data = {
+    hero: {
+      id: 'foo',
+      __typename: 'Droid',
+      name: 'R2D2'
+    }
+  };
+
+  const cache = new InMemoryCache();
+  cache.writeQuery({
+    query: gql`
+    query Foo {
+      hero {
+        id
+        name
+      }
+    }`,
+    data
+  });
+  console.log(cache.extract());
+  const { writeQuery } = compiler.compile(`
   query Foo {
     hero {
       id
@@ -10,7 +32,7 @@ test('poc', () => {
     }
   }`);
 
-  expect(readQuery).toMatchSnapshot();
+  expect(writeQuery(data, {})).toEqual(cache.extract());
 });
 
 
@@ -28,6 +50,7 @@ import * as t from 'babel-types';
 import { parse as babelParse } from 'babylon';
 import generate from 'babel-generator';
 import vm from 'vm';
+import m from 'module';
 
 function getSchema(schemaPath) {
   try {
@@ -49,15 +72,18 @@ class Compiler {
 
   compile(graphqlText) {
     const parsed = Parser.parse(this._schema, graphqlText);
-    IRVisitor.visit(parsed[0], {
-      Root(...args) {
-      }
-    });
+    const root = parsed[0];
+    console.log(root);
+    // IRVisitor.visit(parsed[0], {
+    //   Root(...args) {
+    //     console.log(args);
+    //   }
+    // });
 
     const ast = t.file(
       t.program(
         [t.exportNamedDeclaration(t.functionDeclaration(
-          t.identifier('readQuery'), [],
+          t.identifier('writeQuery'), [],
             t.blockStatement([
               t.returnStatement(t.stringLiteral('hello world!'))
             ])
@@ -65,8 +91,14 @@ class Compiler {
         , [])]
       )
     );
-    const mod1 = vm.runInNewContext(babel.transform('export function what() {}').code);
-    const mod = vm.runInNewContext(babel.transformFromAst(ast).code);
-    console.log(mod);
+
+    const code = generate(ast).code;
+    console.log(code);
+    const exported = {};
+    const mod = vm.runInNewContext(m.wrap(babel.transform(code, {
+      presets: ['env']
+    }).code));
+    mod(exported);
+    return exported;
   }
 }
