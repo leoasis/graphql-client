@@ -28,6 +28,7 @@ test('poc', () => {
   query Foo {
     hero {
       id
+      __typename
       name
     }
   }`);
@@ -80,23 +81,71 @@ class Compiler {
     //   }
     // });
 
-    const ast = t.file(
-      t.program(
-        [t.exportNamedDeclaration(t.functionDeclaration(
-          t.identifier('writeQuery'), [],
-            t.blockStatement([
-              t.returnStatement(t.stringLiteral('hello world!'))
-            ])
-          )
-        , [])]
+    function writeField(identifier, field, entities) {
+      console.log(field);
+      const member = t.memberExpression(
+        identifier,
+        t.identifier(field.name),
+      );
+      const typenameExpression = t.memberExpression(
+        member,
+        t.identifier('__typename')
+      );
+      const idExpression = t.binaryExpression(
+        '+',
+        t.binaryExpression(
+          '+',
+          t.memberExpression(
+            member,
+            t.identifier('id')
+          ),
+          t.stringLiteral(':')
+        ),
+        typenameExpression
+      );
+      return t.objectExpression([
+        t.objectProperty(t.stringLiteral('type'), t.stringLiteral('id')),
+        t.objectProperty(t.stringLiteral('generated'), t.booleanLiteral(false)),
+        t.objectProperty(t.stringLiteral('id'), idExpression),
+        t.objectProperty(t.stringLiteral('typename'), typenameExpression),
+      ])
+    }
+
+    const entities = [];
+    const newRoot = t.objectProperty(
+      t.stringLiteral('ROOT_QUERY'), t.objectExpression(
+        root.selections.map((field) => {
+          return t.objectProperty(t.stringLiteral(field.name), writeField(t.identifier('data'), field, entities))
+        })
       )
+    );
+
+    const ast = t.file(
+      t.program([
+        t.exportNamedDeclaration(
+          t.functionDeclaration(
+            t.identifier('writeQuery'),
+            [t.identifier('data'), t.identifier('cache')],
+            t.blockStatement([
+              t.returnStatement(
+                t.objectExpression([
+                  t.spreadProperty(t.identifier('cache')),
+                  newRoot,
+                  ...entities
+                ])
+              )
+            ])
+          ),
+          []
+        )
+      ])
     );
 
     const code = generate(ast).code;
     console.log(code);
     const exported = {};
     const mod = vm.runInNewContext(m.wrap(babel.transform(code, {
-      presets: ['env']
+      presets: ['env'], plugins: ['transform-object-rest-spread']
     }).code));
     mod(exported);
     return exported;
