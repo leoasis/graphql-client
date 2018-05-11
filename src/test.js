@@ -74,48 +74,70 @@ class Compiler {
   compile(graphqlText) {
     const parsed = Parser.parse(this._schema, graphqlText);
     const root = parsed[0];
-    console.log(root);
+
     // IRVisitor.visit(parsed[0], {
     //   Root(...args) {
     //     console.log(args);
     //   }
     // });
 
-    function writeField(identifier, field, entities) {
-      console.log(field);
+    function writeField(identifier, field, context) {
+      const variableIdentifier = context.makeVariable();
+
       const member = t.memberExpression(
         identifier,
         t.identifier(field.name),
       );
       const typenameExpression = t.memberExpression(
-        member,
+        variableIdentifier,
         t.identifier('__typename')
       );
       const idExpression = t.binaryExpression(
         '+',
         t.binaryExpression(
           '+',
-          t.memberExpression(
-            member,
-            t.identifier('id')
-          ),
+          typenameExpression,
           t.stringLiteral(':')
         ),
-        typenameExpression
+        t.memberExpression(
+          variableIdentifier,
+          t.identifier('id')
+        )
       );
-      return t.objectExpression([
-        t.objectProperty(t.stringLiteral('type'), t.stringLiteral('id')),
-        t.objectProperty(t.stringLiteral('generated'), t.booleanLiteral(false)),
-        t.objectProperty(t.stringLiteral('id'), idExpression),
-        t.objectProperty(t.stringLiteral('typename'), typenameExpression),
+
+      context.addEntity(idExpression, t.objectExpression(
+        field.selections.map(field => (
+          t.objectProperty(t.stringLiteral(field.name), t.memberExpression(variableIdentifier, t.identifier(field.name)))
+        ))
+      ));
+
+      return t.sequenceExpression([
+        t.assignmentExpression('=', variableIdentifier, member),
+        t.objectExpression([
+          t.objectProperty(t.stringLiteral('type'), t.stringLiteral('id')),
+          t.objectProperty(t.stringLiteral('generated'), t.booleanLiteral(false)),
+          t.objectProperty(t.stringLiteral('id'), idExpression),
+          t.objectProperty(t.stringLiteral('typename'), typenameExpression),
+        ])
       ])
     }
 
+    const variables = [];
     const entities = [];
+    const context = {
+      addEntity(id, object) {
+        entities.push(t.objectProperty(id, object, true));
+      },
+      makeVariable() {
+        const identifier = t.identifier(`v${variables.length}`);
+        variables.push(identifier);
+        return identifier;
+      }
+    }
     const newRoot = t.objectProperty(
       t.stringLiteral('ROOT_QUERY'), t.objectExpression(
         root.selections.map((field) => {
-          return t.objectProperty(t.stringLiteral(field.name), writeField(t.identifier('data'), field, entities))
+          return t.objectProperty(t.stringLiteral(field.name), writeField(t.identifier('data'), field, context))
         })
       )
     );
@@ -127,6 +149,11 @@ class Compiler {
             t.identifier('writeQuery'),
             [t.identifier('data'), t.identifier('cache')],
             t.blockStatement([
+              variables.length > 0 ?
+                t.variableDeclaration(
+                  'let',
+                  variables.map(vid => t.variableDeclarator(vid))
+                ) : null,
               t.returnStatement(
                 t.objectExpression([
                   t.spreadProperty(t.identifier('cache')),
@@ -134,7 +161,7 @@ class Compiler {
                   ...entities
                 ])
               )
-            ])
+            ].filter(Boolean))
           ),
           []
         )
