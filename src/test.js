@@ -24,7 +24,7 @@ test('poc', () => {
     data
   });
   console.log(cache.extract());
-  const { writeQuery } = compiler.compile(`
+  const { writeQuery, readQuery } = compiler.compile(`
   query Foo {
     hero {
       id
@@ -33,7 +33,20 @@ test('poc', () => {
     }
   }`);
 
-  expect(writeQuery(data, {})).toEqual(cache.extract());
+  let d = writeQuery(data, {});
+
+  expect(d).toEqual(cache.extract());
+  expect(readQuery(d)).toEqual(
+    cache.readQuery({
+    query: gql`
+      query Foo {
+        hero {
+          id
+          name
+        }
+      }`,
+    })
+  );
 });
 
 
@@ -83,7 +96,7 @@ class Compiler {
 
     function writeField(identifier, field, context) {
       const variableIdentifier = context.makeVariable();
-
+      const idVariableIdentifier = context.makeVariable();
       const member = t.memberExpression(
         identifier,
         t.identifier(field.name),
@@ -105,7 +118,7 @@ class Compiler {
         )
       );
 
-      context.addEntity(idExpression, t.objectExpression(
+      context.addEntity(idVariableIdentifier, t.objectExpression(
         field.selections.map(field => (
           t.objectProperty(t.stringLiteral(field.name), t.memberExpression(variableIdentifier, t.identifier(field.name)))
         ))
@@ -113,10 +126,11 @@ class Compiler {
 
       return t.sequenceExpression([
         t.assignmentExpression('=', variableIdentifier, member),
+        t.assignmentExpression('=', idVariableIdentifier, idExpression),
         t.objectExpression([
           t.objectProperty(t.stringLiteral('type'), t.stringLiteral('id')),
           t.objectProperty(t.stringLiteral('generated'), t.booleanLiteral(false)),
-          t.objectProperty(t.stringLiteral('id'), idExpression),
+          t.objectProperty(t.stringLiteral('id'), idVariableIdentifier),
           t.objectProperty(t.stringLiteral('typename'), typenameExpression),
         ])
       ])
@@ -134,12 +148,27 @@ class Compiler {
         return identifier;
       }
     }
-    const newRoot = t.objectProperty(
+    const writeRoot = t.objectProperty(
       t.stringLiteral('ROOT_QUERY'), t.objectExpression(
         root.selections.map((field) => {
           return t.objectProperty(t.stringLiteral(field.name), writeField(t.identifier('data'), field, context))
         })
       )
+    );
+
+    const readVariables = [];
+    const readContext = {
+
+    };
+
+    function readField(identifier, field, context) {
+      return t.memberExpression(t.memberExpression(identifier, t.identifier(field.name)), t.identifier('id'));
+    }
+
+    const readRoot = t.objectExpression(
+      root.selections.map((field) => {
+        return t.objectProperty(t.stringLiteral(field.name), readField(t.memberExpression(t.identifier('cache'), t.identifier('ROOT_QUERY')), field, readContext));
+      })
     );
 
     const ast = t.file(
@@ -157,9 +186,26 @@ class Compiler {
               t.returnStatement(
                 t.objectExpression([
                   t.spreadProperty(t.identifier('cache')),
-                  newRoot,
+                  writeRoot,
                   ...entities
                 ])
+              )
+            ].filter(Boolean))
+          ),
+          []
+        ),
+        t.exportNamedDeclaration(
+          t.functionDeclaration(
+            t.identifier('readQuery'),
+            [t.identifier('cache')],
+            t.blockStatement([
+              readVariables.length > 0 ?
+                t.variableDeclaration(
+                  'let',
+                  variables.map(vid => t.variableDeclarator(vid))
+                ) : null,
+              t.returnStatement(
+                readRoot
               )
             ].filter(Boolean))
           ),
