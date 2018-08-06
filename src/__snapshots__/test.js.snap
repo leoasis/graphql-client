@@ -16,12 +16,13 @@ exports[`basic read and write query 1`] = `
   };
 }
 export function readQuery(cache) {
-  let v0, v1, v2;
-  return v0 = cache.ROOT_QUERY, {
-    \\"hero\\": (v1 = v0.hero, v2 = cache[v1], {
-      \\"id\\": v2.id,
-      \\"__typename\\": v2.__typename,
-      \\"name\\": v2.name
+  const root = cache.ROOT_QUERY;
+  let v0, v1;
+  return {
+    \\"hero\\": (v0 = root.hero, v1 = cache[v0], {
+      \\"id\\": v1.id,
+      \\"__typename\\": v1.__typename,
+      \\"name\\": v1.name
     })
   };
 }"
@@ -29,7 +30,7 @@ export function readQuery(cache) {
 
 exports[`more complex read and write query 1`] = `
 "export function writeQuery(data, cache) {
-  let v0, v1, v2, v3;
+  let v0, v1, v2;
   return {
     ...cache,
     \\"ROOT_QUERY\\": {
@@ -48,13 +49,48 @@ exports[`more complex read and write query 1`] = `
   };
 }
 export function readQuery(cache) {
-  let v0, v1, v2, v3;
-  return v0 = cache.ROOT_QUERY, {
-    \\"hero\\": (v1 = v0.hero, v2 = cache[v1], {
-      \\"__typename\\": v2.__typename,
-      \\"id\\": v2.id,
-      \\"name\\": v2.name,
-      \\"friends\\": (v3 = v2.friends, v3.map(item => cache[item]))
+  const root = cache.ROOT_QUERY;
+  let v0, v1, v2;
+  return {
+    \\"hero\\": (v0 = root.hero, v1 = cache[v0], {
+      \\"__typename\\": v1.__typename,
+      \\"id\\": v1.id,
+      \\"name\\": v1.name,
+      \\"friends\\": (v2 = v1.friends, v2.map(item => cache[item]))
+    })
+  };
+}"
+`;
+
+exports[`nested lists 1`] = `
+"export function writeQuery(data, cache) {
+  let v0, v1, v2;
+  return {
+    ...cache,
+    \\"ROOT_QUERY\\": {
+      \\"hero\\": (v0 = data.hero, v1 = v0.__typename + \\":\\" + v0.id, v1)
+    },
+    [v1]: {
+      \\"__typename\\": v0.__typename,
+      \\"id\\": v0.id,
+      \\"name\\": v0.name,
+      \\"friends\\": (v2 = v0.friends, v2.map(item => item.__typename + \\":\\" + item.id))
+    },
+    ...v2.reduce((obj, item) => {
+      obj[item.__typename + \\":\\" + item.id] = item;
+      return obj;
+    }, {})
+  };
+}
+export function readQuery(cache) {
+  const root = cache.ROOT_QUERY;
+  let v0, v1, v2;
+  return {
+    \\"hero\\": (v0 = root.hero, v1 = cache[v0], {
+      \\"__typename\\": v1.__typename,
+      \\"id\\": v1.id,
+      \\"name\\": v1.name,
+      \\"friends\\": (v2 = v1.friends, v2.map(item => cache[item]))
     })
   };
 }"
